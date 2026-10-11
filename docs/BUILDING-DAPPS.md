@@ -308,6 +308,7 @@ The observer sits on the read/evidence side:
 
 ```text
                   ┌─────────────── node A
+                  ├─────────────── node D
 DApp ─► Observer ─┼─────────────── node B
                   └─────────────── node C
                          │
@@ -345,6 +346,7 @@ The classifier then compares finalized identities.
 
 ```text
 agreement
+height_skew
 majority
 divergence
 unavailable
@@ -354,7 +356,7 @@ unavailable
 
 Do not map every non-agreement to “chain failure.”
 
-For example, one node may simply be behind. The next observer layer is specifically intended to distinguish ancestry-compatible lag from conflicting finalized history.
+`height_skew` deliberately separates different finalized heights from same-height finalized-hash conflict. A lower finalized height may simply be lagging; the observer does not claim ancestry compatibility until ancestry has actually been checked.
 
 ---
 
