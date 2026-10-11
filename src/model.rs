@@ -9,6 +9,7 @@ pub struct NodeTarget {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Observation {
     pub node: String,
+    #[serde(skip_serializing)]
     pub base_url: String,
     pub reachable: bool,
     pub network_id: Option<String>,

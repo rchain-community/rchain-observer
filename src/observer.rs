@@ -118,6 +118,7 @@ async fn observe_node(client: Client, node: NodeTarget) -> Observation {
 }
 
 fn failed(node: &NodeTarget, error: String) -> Observation {
+    let error = error.replace(&node.base_url, "<node>");
     Observation {
         node: node.name.clone(),
         base_url: node.base_url.clone(),
