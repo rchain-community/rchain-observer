@@ -2,6 +2,8 @@
 
 **A live, read-only, multi-node evidence layer for the RChain public testnet.**
 
+**Provenance:** initiated and developed by [**AixAria (`@aixaria0`)**](https://github.com/aixaria0) for the [**RChain Community**](https://github.com/rchain-community).
+
 [**Rholox**](https://rholox.com) · [**Live Observer API**](https://testnet.rhobot.net/observer/v1/observation) · [**Observer Health**](https://testnet.rhobot.net/observer/health) · Rust
 
 The public testnet already has an execution endpoint. What it did not have was an application-facing way to answer a harder question:
