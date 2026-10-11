@@ -1,0 +1,3 @@
+new return in {
+  return!("hello from Rholang")
+}
