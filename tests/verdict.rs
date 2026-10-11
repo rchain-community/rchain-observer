@@ -26,11 +26,23 @@ fn unanimous_snapshot_is_agreement() {
 }
 
 #[test]
-fn strict_majority_is_reported() {
+fn different_finalized_heights_are_height_skew_not_hash_divergence() {
     let observations = vec![
         observed("a", 100, "abc"),
         observed("b", 100, "abc"),
         observed("c", 99, "def"),
+    ];
+    let verdict = classify(&observations);
+    assert_eq!(verdict.class, VerdictClass::HeightSkew);
+    assert_eq!(verdict.agreeing_nodes, 2);
+}
+
+#[test]
+fn strict_majority_at_same_height_with_conflicting_hash_is_reported() {
+    let observations = vec![
+        observed("a", 100, "abc"),
+        observed("b", 100, "abc"),
+        observed("c", 100, "def"),
     ];
     let verdict = classify(&observations);
     assert_eq!(verdict.class, VerdictClass::Majority);
@@ -38,7 +50,7 @@ fn strict_majority_is_reported() {
 }
 
 #[test]
-fn split_view_is_divergence() {
+fn split_view_at_same_height_is_divergence() {
     let observations = vec![observed("a", 100, "abc"), observed("b", 100, "def")];
     let verdict = classify(&observations);
     assert_eq!(verdict.class, VerdictClass::Divergence);

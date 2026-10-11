@@ -1,0 +1,34 @@
+[Unit]
+Description=RChain multi-node observer for the public testnet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rchain-observer
+Group=rchain-observer
+ExecStart=/usr/local/bin/rchain-observer \
+  --node A=http://127.0.0.1:40403 \
+  --node D=http://127.0.0.1:41403 \
+  --node B=http://10.108.0.4:40403 \
+  --node C=http://10.108.0.4:41403 \
+  --timeout-ms 2500 \
+  serve --listen 127.0.0.1:8088 --refresh-ms 5000
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+MemoryMax=96M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

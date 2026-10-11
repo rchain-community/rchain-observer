@@ -50,11 +50,12 @@ The first verdict layer classifies exact finalized snapshots as:
 | Verdict | Meaning |
 |---|---|
 | `agreement` | every comparable node reports the same finalized identity |
-| `majority` | a strict majority agrees and at least one node differs |
-| `divergence` | no strict majority exists |
+| `height_skew` | finalized heights differ, but no same-height hash conflict was observed; ancestry is not yet established |
+| `majority` | a strict majority shares one finalized identity while a same-height conflicting hash is present |
+| `divergence` | network/shard identity conflicts, or finalized hashes conflict without a strict majority |
 | `unavailable` | no comparable finalized snapshot was returned |
 
-A lagging node is evidence of a different observation. It is **not**, by itself, evidence of a consensus safety failure. Ancestry-aware comparison belongs to the next observer layer.
+A lagging node is evidence of a different observation. It is **not**, by itself, evidence of a consensus safety failure. `height_skew` is therefore deliberately separate from same-height hash conflict. Ancestry-aware comparison remains the next observer layer.
 
 ---
 
@@ -321,7 +322,7 @@ The command emits one JSON evidence report containing every node observation and
 cargo run -- \
   --node gateway=https://testnet.rhobot.net \
   --node validator-a=https://validator-a.example \
-  serve --listen 127.0.0.1:8088
+  serve --listen 127.0.0.1:8088 --refresh-ms 5000
 ```
 
 Endpoints:

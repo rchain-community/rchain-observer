@@ -1,11 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::future::join_all;
 use reqwest::Client;
 use serde::Deserialize;
 
 use crate::{
-    model::{NodeTarget, Observation, ObservationReport},
+    model::{HeightSummary, NodeTarget, Observation, ObservationReport},
     verdict::classify,
 };
 
@@ -56,7 +56,15 @@ impl Observer {
         )
         .await;
         let verdict = classify(&observations);
+        let heights = summarize_heights(&observations);
+        let observed_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
         ObservationReport {
+            observed_at_ms,
+            heights,
             observations,
             verdict,
         }
@@ -120,5 +128,24 @@ fn failed(node: &NodeTarget, error: String) -> Observation {
         finalized_block: None,
         finalized_hash: None,
         error: Some(error),
+    }
+}
+
+fn summarize_heights(observations: &[Observation]) -> HeightSummary {
+    let latest = observations.iter().filter_map(|value| value.latest_block);
+    let finalized = observations
+        .iter()
+        .filter_map(|value| value.finalized_block);
+    let latest_min = latest.clone().min();
+    let latest_max = latest.max();
+    let finalized_min = finalized.clone().min();
+    let finalized_max = finalized.max();
+
+    HeightSummary {
+        reachable_nodes: observations.iter().filter(|value| value.reachable).count(),
+        latest_min,
+        latest_max,
+        finalized_min,
+        finalized_max,
     }
 }

@@ -23,6 +23,7 @@ pub struct Observation {
 #[serde(rename_all = "snake_case")]
 pub enum VerdictClass {
     Agreement,
+    HeightSkew,
     Majority,
     Divergence,
     Unavailable,
@@ -47,7 +48,18 @@ pub struct FinalizedIdentity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HeightSummary {
+    pub reachable_nodes: usize,
+    pub latest_min: Option<u64>,
+    pub latest_max: Option<u64>,
+    pub finalized_min: Option<u64>,
+    pub finalized_max: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservationReport {
+    pub observed_at_ms: u64,
+    pub heights: HeightSummary,
     pub observations: Vec<Observation>,
     pub verdict: Verdict,
 }

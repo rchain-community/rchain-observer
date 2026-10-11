@@ -5,7 +5,11 @@ use axum::{extract::State, routing::get, Json, Router};
 use clap::{Parser, Subcommand};
 use rchain_observer::{model::NodeTarget, observer::Observer};
 use serde_json::{json, Value};
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    sync::RwLock,
+    time::{self, MissedTickBehavior},
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "rchain-observer")]
@@ -27,7 +31,14 @@ enum Command {
     Serve {
         #[arg(long, default_value = "127.0.0.1:8088")]
         listen: String,
+        #[arg(long, default_value_t = 5000)]
+        refresh_ms: u64,
     },
+}
+
+#[derive(Clone)]
+struct ApiState {
+    snapshot: Arc<RwLock<rchain_observer::model::ObservationReport>>,
 }
 
 fn parse_node(value: &str) -> Result<NodeTarget, String> {
@@ -56,19 +67,41 @@ async fn main() -> anyhow::Result<()> {
             let report = observer.observe().await;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
-        Command::Serve { listen } => serve(observer, &listen).await?,
+        Command::Serve { listen, refresh_ms } => serve(observer, &listen, refresh_ms).await?,
     }
 
     Ok(())
 }
 
-async fn serve(observer: Observer, listen: &str) -> anyhow::Result<()> {
+async fn serve(observer: Observer, listen: &str, refresh_ms: u64) -> anyhow::Result<()> {
+    if refresh_ms < 1000 {
+        return Err(anyhow!("refresh-ms must be at least 1000"));
+    }
+
     let address = SocketAddr::from_str(listen)
         .with_context(|| format!("invalid listen address: {listen}"))?;
+    let initial = observer.observe().await;
+    let state = ApiState {
+        snapshot: Arc::new(RwLock::new(initial)),
+    };
+
+    let refresh_state = state.clone();
+    let refresh_observer = observer.clone();
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_millis(refresh_ms));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let next = refresh_observer.observe().await;
+            *refresh_state.snapshot.write().await = next;
+        }
+    });
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/observation", get(observation))
-        .with_state(Arc::new(observer));
+        .with_state(state);
     let listener = TcpListener::bind(address).await?;
     axum::serve(listener, app)
         .await
@@ -76,10 +109,19 @@ async fn serve(observer: Observer, listen: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn health() -> Json<Value> {
-    Json(json!({"status": "ok"}))
+async fn health(State(state): State<ApiState>) -> Json<Value> {
+    let snapshot = state.snapshot.read().await;
+    Json(json!({
+        "status": "ok",
+        "observedAtMs": snapshot.observed_at_ms,
+        "observedNodes": snapshot.verdict.observed_nodes,
+        "reachableNodes": snapshot.heights.reachable_nodes,
+        "verdict": snapshot.verdict.class,
+    }))
 }
 
-async fn observation(State(observer): State<Arc<Observer>>) -> Json<Value> {
-    Json(serde_json::to_value(observer.observe().await).expect("serializable observation report"))
+async fn observation(
+    State(state): State<ApiState>,
+) -> Json<rchain_observer::model::ObservationReport> {
+    Json(state.snapshot.read().await.clone())
 }
