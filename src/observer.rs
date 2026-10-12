@@ -1,13 +1,22 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashSet,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use futures::future::join_all;
 use reqwest::Client;
 use serde::Deserialize;
 
 use crate::{
-    model::{HeightSummary, NodeTarget, Observation, ObservationReport},
-    verdict::classify,
+    ancestry::verify_ancestry,
+    model::{
+        AncestryCheck, AncestryClass, FinalizedIdentity, HeightSummary, NodeTarget, Observation,
+        ObservationReport, VerdictClass,
+    },
+    verdict::{classify, refine_with_ancestry},
 };
+
+const DEFAULT_ANCESTRY_MAX_BLOCKS: usize = 512;
 
 #[derive(Debug, Deserialize)]
 struct StatusResponse {
@@ -39,12 +48,24 @@ struct BlockInfo {
 pub struct Observer {
     client: Client,
     nodes: Vec<NodeTarget>,
+    ancestry_max_blocks: usize,
+    ancestry_timeout: Duration,
 }
 
 impl Observer {
     pub fn new(nodes: Vec<NodeTarget>, timeout: Duration) -> anyhow::Result<Self> {
         let client = Client::builder().timeout(timeout).build()?;
-        Ok(Self { client, nodes })
+        Ok(Self {
+            client,
+            nodes,
+            ancestry_max_blocks: DEFAULT_ANCESTRY_MAX_BLOCKS,
+            ancestry_timeout: timeout.saturating_mul(2),
+        })
+    }
+
+    pub fn with_ancestry_max_blocks(mut self, max_blocks: usize) -> Self {
+        self.ancestry_max_blocks = max_blocks;
+        self
     }
 
     pub async fn observe(&self) -> ObservationReport {
@@ -55,19 +76,121 @@ impl Observer {
                 .map(|node| observe_node(self.client.clone(), node)),
         )
         .await;
-        let verdict = classify(&observations);
+
+        let mut verdict = classify(&observations);
+        let ancestry_checks = if verdict.class == VerdictClass::HeightSkew {
+            self.verify_height_skew(&observations, verdict.reference.as_ref())
+                .await
+        } else {
+            Vec::new()
+        };
+        verdict = refine_with_ancestry(verdict, &ancestry_checks);
+
         let heights = summarize_heights(&observations);
         let observed_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
+
         ObservationReport {
             observed_at_ms,
             heights,
             observations,
+            ancestry_checks,
             verdict,
         }
+    }
+
+    async fn verify_height_skew(
+        &self,
+        observations: &[Observation],
+        reference: Option<&FinalizedIdentity>,
+    ) -> Vec<AncestryCheck> {
+        let Some(reference) = reference else {
+            return Vec::new();
+        };
+
+        let witnesses = observations
+            .iter()
+            .filter(|observation| finalized_identity(observation).as_ref() == Some(reference))
+            .filter_map(|observation| {
+                self.nodes
+                    .iter()
+                    .find(|node| node.name == observation.node)
+                    .cloned()
+            })
+            .collect::<Vec<_>>();
+
+        let mut seen = HashSet::new();
+        let mut lower_identities = observations
+            .iter()
+            .filter_map(finalized_identity)
+            .filter(|identity| {
+                identity != reference && identity.block_number < reference.block_number
+            })
+            .filter(|identity| seen.insert(identity.clone()))
+            .collect::<Vec<_>>();
+        lower_identities.sort_by(|left, right| {
+            left.block_number
+                .cmp(&right.block_number)
+                .then_with(|| left.block_hash.cmp(&right.block_hash))
+        });
+
+        let mut checks = Vec::with_capacity(lower_identities.len());
+        for lower in lower_identities {
+            if witnesses.is_empty() {
+                checks.push(AncestryCheck {
+                    class: AncestryClass::UnresolvedHeightSkew,
+                    lower,
+                    higher: reference.clone(),
+                    witness_node: None,
+                    examined_blocks: 0,
+                    path: Vec::new(),
+                    reason: "no node reporting the highest finalized reference is available as an ancestry witness".to_string(),
+                });
+                continue;
+            }
+
+            let mut fallback = None;
+            for witness in &witnesses {
+                let check = match tokio::time::timeout(
+                    self.ancestry_timeout,
+                    verify_ancestry(
+                        &self.client,
+                        witness,
+                        &lower,
+                        reference,
+                        self.ancestry_max_blocks,
+                    ),
+                )
+                .await
+                {
+                    Ok(check) => check,
+                    Err(_) => AncestryCheck {
+                        class: AncestryClass::UnresolvedHeightSkew,
+                        lower: lower.clone(),
+                        higher: reference.clone(),
+                        witness_node: Some(witness.name.clone()),
+                        examined_blocks: 0,
+                        path: Vec::new(),
+                        reason: "ancestry verification exceeded the total time budget".to_string(),
+                    },
+                };
+
+                if check.class != AncestryClass::UnresolvedHeightSkew {
+                    fallback = Some(check);
+                    break;
+                }
+                fallback = Some(check);
+            }
+
+            if let Some(check) = fallback {
+                checks.push(check);
+            }
+        }
+
+        checks
     }
 }
 
@@ -115,6 +238,15 @@ async fn observe_node(client: Client, node: NodeTarget) -> Observation {
         }
         (Err(error), _) | (_, Err(error)) => failed(&node, error.to_string()),
     }
+}
+
+fn finalized_identity(observation: &Observation) -> Option<FinalizedIdentity> {
+    Some(FinalizedIdentity {
+        network_id: observation.network_id.clone()?,
+        shard_id: observation.shard_id.clone()?,
+        block_number: observation.finalized_block?,
+        block_hash: observation.finalized_hash.clone()?,
+    })
 }
 
 fn failed(node: &NodeTarget, error: String) -> Observation {

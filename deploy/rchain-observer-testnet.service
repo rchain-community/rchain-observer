@@ -13,6 +13,7 @@ ExecStart=/usr/local/bin/rchain-observer \
   --node B=http://10.108.0.4:40403 \
   --node C=http://10.108.0.4:41403 \
   --timeout-ms 2500 \
+  --ancestry-max-blocks 512 \
   serve --listen 127.0.0.1:8088 --refresh-ms 5000
 Restart=always
 RestartSec=3
