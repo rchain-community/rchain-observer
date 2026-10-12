@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::model::{FinalizedIdentity, Observation, Verdict, VerdictClass};
+use crate::model::{
+    AncestryCheck, AncestryClass, FinalizedIdentity, Observation, Verdict, VerdictClass,
+};
 
 pub fn classify(observations: &[Observation]) -> Verdict {
     let identities = observations
@@ -131,4 +133,41 @@ fn select_reference(groups: &HashMap<FinalizedIdentity, usize>) -> (FinalizedIde
         })
         .map(|(identity, count)| (identity.clone(), *count))
         .expect("non-empty finalized groups")
+}
+
+pub fn refine_with_ancestry(mut verdict: Verdict, checks: &[AncestryCheck]) -> Verdict {
+    if verdict.class != VerdictClass::HeightSkew || checks.is_empty() {
+        return verdict;
+    }
+
+    let conflicting = checks
+        .iter()
+        .filter(|check| check.class == AncestryClass::ConflictingFinalizedHistory)
+        .count();
+    let proven = checks
+        .iter()
+        .filter(|check| check.class == AncestryClass::ProvenLag)
+        .count();
+    let unresolved = checks.len().saturating_sub(conflicting + proven);
+
+    if conflicting > 0 {
+        verdict.class = VerdictClass::ConflictingFinalizedHistory;
+        verdict.summary = format!(
+            "{conflicting}/{} ancestry checks prove finalized histories that do not connect to the highest finalized reference",
+            checks.len()
+        );
+    } else if unresolved == 0 && proven == checks.len() {
+        verdict.class = VerdictClass::ProvenLag;
+        verdict.summary = format!(
+            "{proven}/{} lower finalized identities are proven ancestors of the highest finalized reference",
+            checks.len()
+        );
+    } else {
+        verdict.class = VerdictClass::HeightSkew;
+        verdict.summary = format!(
+            "finalized height skew remains unresolved: {proven} proven ancestry checks, {unresolved} unresolved"
+        );
+    }
+
+    verdict
 }

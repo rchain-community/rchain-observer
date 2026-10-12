@@ -340,14 +340,16 @@ finalized hash
 error
 ```
 
-The classifier then compares finalized identities.
+The classifier first compares finalized identities. When heights differ without a same-height hash conflict, the observer then verifies ancestry by walking the higher finalized block's node-reported justification DAG through `GET /api/block/{hash}`.
 
 ### Current verdicts
 
 ```text
 agreement
+proven_lag
 height_skew
 majority
+conflicting_finalized_history
 divergence
 unavailable
 ```
@@ -356,7 +358,7 @@ unavailable
 
 Do not map every non-agreement to “chain failure.”
 
-`height_skew` deliberately separates different finalized heights from same-height finalized-hash conflict. A lower finalized height may simply be lagging; the observer does not claim ancestry compatibility until ancestry has actually been checked.
+A different finalized height is only promoted to `proven_lag` when the lower finalized hash is actually reachable from the higher finalized block's justification ancestry. If a complete traversal excludes that hash, the observer reports `conflicting_finalized_history`. Missing, malformed, timed-out, or budget-exhausted ancestry evidence remains `height_skew`.
 
 ---
 
@@ -515,20 +517,19 @@ If you do not have a measured value for TVL, TPS, APR, liquidity, price, peer co
 
 ---
 
-## 13. What `rchain-observer` does not prove yet
+## 13. What `rchain-observer` proves — and what it still does not
 
-The current observer compares exact finalized snapshots. It does not yet prove ancestry compatibility between two different finalized heights.
-
-So:
+For different finalized heights, the observer now checks whether the lower finalized hash is reachable from the higher finalized block through the node-reported justification DAG. That is enough to distinguish:
 
 ```text
-node A finalized height 100 / hash X
-node B finalized height 99  / hash Y
+proven_lag
+conflicting_finalized_history
+unresolved height_skew
 ```
 
-is currently a different snapshot. The correct next question is whether `Y` is an ancestor of `X`, not whether the chain has necessarily diverged.
+The traversal is bounded and fail-closed: incomplete block evidence never becomes a positive ancestry claim.
 
-That distinction is the main next engineering layer.
+The current layer still does **not** independently reconstruct the block hash from raw encoded block bytes, persist a historical evidence ledger, or establish agreement between multiple independent observer processes. Those are separate evidence-strengthening layers rather than prerequisites for ordinary ancestry classification.
 
 ---
 

@@ -43,8 +43,9 @@ The observer is connected to the **four bonded validators** of the live RChain p
                           finalized-state comparison
                                        │
                                        ▼
-                 agreement / height_skew / majority /
-                       divergence / unavailable
+             agreement / proven_lag / height_skew /
+         majority / conflicting_finalized_history /
+                    divergence / unavailable
 ```
 
 The separation is deliberate:
@@ -106,6 +107,7 @@ finalized block hash
 node-local failure, if any
 cross-node verdict
 reference finalized identity, when available
+ancestry checks, when finalized heights differ
 ```
 
 The public response intentionally exposes node labels such as `A`, `B`, `C`, and `D` without publishing the internal observation URLs used by the service.
@@ -136,7 +138,7 @@ finalized hash
 error, if the observation failed
 ```
 
-Then it computes network-level height ranges and classifies the finalized observations.
+Then it computes network-level height ranges and classifies the finalized observations. If finalized heights differ without a same-height hash conflict, the observer performs a bounded ancestry check over the higher block's node-reported justification DAG using `GET /api/block/{hash}` before refining the verdict.
 
 The live service uses a **bounded polling loop** and serves the most recent cached snapshot to HTTP clients. A browser refresh therefore does **not** trigger a fresh fan-out of requests to every validator.
 
@@ -145,6 +147,8 @@ Current live-service cadence:
 ```text
 observer poll interval   5 seconds
 per-node timeout         2.5 seconds
+ancestry total timeout   5 seconds per check
+ancestry block budget    512 blocks per check
 public API               cached snapshot
 observer listener        loopback only
 service memory ceiling   96 MB
@@ -161,8 +165,10 @@ The verdict is not a decorative status light. It is a compact statement about th
 | Verdict | Meaning |
 |---|---|
 | `agreement` | every comparable node reports the same finalized identity |
-| `height_skew` | finalized heights differ, but no same-height hash conflict was observed |
+| `proven_lag` | finalized heights differ and every lower finalized identity was found in the justification ancestry of the highest finalized reference |
+| `height_skew` | finalized heights differ but ancestry could not be completed within the available evidence/budget; uncertainty is preserved |
 | `majority` | a strict majority shares one finalized identity while a conflicting same-height hash is present |
+| `conflicting_finalized_history` | a complete ancestry traversal reached the lower finalized height without finding that lower finalized hash |
 | `divergence` | network/shard identity conflicts, or same-height finalized hashes conflict without a strict majority |
 | `unavailable` | no comparable finalized snapshot was returned |
 
@@ -188,13 +194,24 @@ A: finalized 711 / hash X
 B: finalized 711 / hash Y
 ```
 
-The first is **height skew** until ancestry is established.
+The first enters the ancestry verifier. The observer walks backward from the higher finalized block through its reported `justifications` until one of three things happens:
 
-The second is a **same-height finalized-hash conflict**.
+```text
+lower finalized hash is reached
+        → proven_lag
+
+all reachable branches reach/bypass the lower height without that hash
+        → conflicting_finalized_history
+
+required block evidence is missing, malformed, times out, or exceeds the traversal budget
+        → height_skew
+```
+
+The second example is already a **same-height finalized-hash conflict** and does not need ancestry inference.
 
 `rchain-observer` keeps those cases separate because collapsing them into one red state would destroy the information an operator or application actually needs.
 
-> `height_skew` is not automatically a consensus safety failure, and the current classifier does not claim an ancestry theorem it has not checked.
+> A different height becomes `proven_lag` only after a concrete justification path is found. Incomplete evidence remains `height_skew`; it is never promoted by height ordering alone.
 
 ---
 
@@ -278,7 +295,23 @@ finalized_max
 
 A synchronized network may produce a single-value range. A lagging node makes the range widen without forcing the classifier to call that a hash conflict.
 
-## C. Verdict
+## C. Ancestry evidence
+
+When finalized heights differ, each unique lower finalized identity receives an ancestry check against the highest finalized reference. The public report preserves:
+
+```text
+class
+lower finalized identity
+higher finalized identity
+witness node label
+examined block count
+justification path, when proven
+reason
+```
+
+The traversal is bounded. If the observer cannot complete the evidence graph safely, the check stays `unresolved_height_skew` rather than guessing.
+
+## D. Verdict
 
 The verdict records:
 
@@ -305,7 +338,7 @@ The observer therefore treats failures as evidence.
 |---|---|
 | one node times out | that node becomes unreachable; the error is retained |
 | all nodes fail | verdict becomes `unavailable` |
-| one node is behind | height range widens; may classify as `height_skew` |
+| one node is behind | ancestry is checked; result becomes `proven_lag`, `conflicting_finalized_history`, or remains `height_skew` if evidence is incomplete |
 | same-height hashes differ | conflict is surfaced explicitly |
 | network or shard differs | classified as divergence |
 | malformed or incomplete node response | observation is not silently promoted to comparable evidence |
@@ -417,11 +450,13 @@ The CLI accepts any set of compatible RChain HTTP endpoints; the public-testnet 
 The core path is deliberately small enough to audit.
 
 ```text
-src/main.rs       CLI, polling service, HTTP surface
-src/observer.rs   concurrent node observation
-src/model.rs      observation/report/verdict model
-src/verdict.rs    finalized-state classifier
-tests/verdict.rs  deterministic verdict tests
+src/main.rs        CLI, polling service, HTTP surface
+src/observer.rs    concurrent node observation + ancestry orchestration
+src/ancestry.rs    bounded justification-DAG ancestry verifier
+src/model.rs       observation/report/verdict/evidence model
+src/verdict.rs     snapshot classifier + ancestry refinement
+tests/verdict.rs   deterministic snapshot-verdict tests
+tests/ancestry.rs  deterministic HTTP ancestry-evidence tests
 ```
 
 Development checks:
@@ -441,6 +476,9 @@ exact agreement
 height skew without false divergence
 strict-majority same-height conflict
 same-height split view
+proven lag from an explicit justification path
+conflicting finalized history after complete traversal
+unresolved height skew when required block evidence is unavailable
 ```
 
 ---
@@ -459,6 +497,11 @@ What exists now:
 ✓ finalized-hash comparison
 ✓ exact agreement
 ✓ height-skew classification
+✓ bounded justification-DAG ancestry verification
+✓ explicit `proven_lag` classification
+✓ explicit `conflicting_finalized_history` classification
+✓ unresolved ancestry remains `height_skew`
+✓ ancestry witness/path/examined-block evidence
 ✓ majority conflict classification
 ✓ divergence classification
 ✓ private topology redaction
@@ -468,7 +511,7 @@ What exists now:
 What is deliberately not claimed yet:
 
 ```text
-✗ ancestry proof between different finalized heights
+✗ independent cryptographic re-hash of raw block bytes
 ✗ historical evidence persistence
 ✗ cryptographically signed observer reports
 ✗ stake-weighted application policy
@@ -483,7 +526,7 @@ Those are separate engineering problems and should stay separate instead of bein
 
 The next useful layers are about making evidence richer, not making the verdict louder.
 
-1. **Ancestry-aware finality comparison** — determine whether a lower finalized snapshot is an ancestor of a higher one before escalating height skew.
+1. **Raw-block cryptographic verification** — reproduce content-addressed block hashes from the node's raw encoded bytes instead of relying only on the structured block response.
 2. **Bounded observation history** — preserve transitions across time instead of exposing only the latest snapshot.
 3. **Stable evidence identities** — make reports addressable and reproducible across clients.
 4. **Deploy-to-finality evidence** — connect a deploy id to processing, inclusion, finalized visibility, and cross-node confirmation.

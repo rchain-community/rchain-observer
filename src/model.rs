@@ -24,8 +24,10 @@ pub struct Observation {
 #[serde(rename_all = "snake_case")]
 pub enum VerdictClass {
     Agreement,
+    ProvenLag,
     HeightSkew,
     Majority,
+    ConflictingFinalizedHistory,
     Divergence,
     Unavailable,
 }
@@ -48,6 +50,25 @@ pub struct FinalizedIdentity {
     pub block_hash: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AncestryClass {
+    ProvenLag,
+    ConflictingFinalizedHistory,
+    UnresolvedHeightSkew,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AncestryCheck {
+    pub class: AncestryClass,
+    pub lower: FinalizedIdentity,
+    pub higher: FinalizedIdentity,
+    pub witness_node: Option<String>,
+    pub examined_blocks: usize,
+    pub path: Vec<String>,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HeightSummary {
     pub reachable_nodes: usize,
@@ -62,5 +83,6 @@ pub struct ObservationReport {
     pub observed_at_ms: u64,
     pub heights: HeightSummary,
     pub observations: Vec<Observation>,
+    pub ancestry_checks: Vec<AncestryCheck>,
     pub verdict: Verdict,
 }

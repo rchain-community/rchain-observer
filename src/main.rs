@@ -21,6 +21,9 @@ struct Cli {
     #[arg(long, default_value_t = 3000)]
     timeout_ms: u64,
 
+    #[arg(long, default_value_t = 512)]
+    ancestry_max_blocks: usize,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -60,7 +63,11 @@ fn parse_node(value: &str) -> Result<NodeTarget, String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let observer = Observer::new(cli.nodes, Duration::from_millis(cli.timeout_ms))?;
+    if cli.ancestry_max_blocks == 0 {
+        return Err(anyhow!("ancestry-max-blocks must be at least 1"));
+    }
+    let observer = Observer::new(cli.nodes, Duration::from_millis(cli.timeout_ms))?
+        .with_ancestry_max_blocks(cli.ancestry_max_blocks);
 
     match cli.command {
         Command::Once => {
@@ -117,6 +124,7 @@ async fn health(State(state): State<ApiState>) -> Json<Value> {
         "observedNodes": snapshot.verdict.observed_nodes,
         "reachableNodes": snapshot.heights.reachable_nodes,
         "verdict": snapshot.verdict.class,
+        "ancestryChecks": snapshot.ancestry_checks.len(),
     }))
 }
 
