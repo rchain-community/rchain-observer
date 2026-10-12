@@ -65,6 +65,7 @@ pub struct AncestryCheck {
     pub higher: FinalizedIdentity,
     pub witness_node: Option<String>,
     pub examined_blocks: usize,
+    pub cryptographically_verified_blocks: usize,
     pub path: Vec<String>,
     pub reason: String,
 }

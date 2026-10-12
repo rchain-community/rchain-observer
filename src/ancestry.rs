@@ -1,27 +1,11 @@
 use std::collections::{HashSet, VecDeque};
 
 use reqwest::Client;
-use serde::Deserialize;
 
-use crate::model::{AncestryCheck, AncestryClass, FinalizedIdentity, NodeTarget};
-
-#[derive(Debug, Deserialize)]
-struct BlockResponse {
-    #[serde(rename = "blockInfo")]
-    block_info: Option<BlockEvidence>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BlockEvidence {
-    #[serde(rename = "blockHash")]
-    block_hash: String,
-    #[serde(rename = "blockNumber")]
-    block_number: u64,
-    #[serde(rename = "shardId")]
-    shard_id: Option<String>,
-    #[serde(default)]
-    justifications: Vec<String>,
-}
+use crate::{
+    model::{AncestryCheck, AncestryClass, FinalizedIdentity, NodeTarget},
+    raw_block::fetch_verified_block,
+};
 
 #[derive(Debug)]
 struct QueueEntry {
@@ -84,7 +68,7 @@ pub async fn verify_ancestry(
             );
         }
 
-        let block = match fetch_block(client, witness, &entry.hash).await {
+        let block = match fetch_verified_block(client, witness, &entry.hash).await {
             Ok(block) => block,
             Err(reason) => return unresolved(witness, lower, higher, examined_blocks, &reason),
         };
@@ -100,7 +84,7 @@ pub async fn verify_ancestry(
             );
         }
 
-        if block.shard_id.as_deref() != Some(higher.shard_id.as_str()) {
+        if block.shard_id != higher.shard_id {
             return unresolved(
                 witness,
                 lower,
@@ -148,8 +132,9 @@ pub async fn verify_ancestry(
                 higher: higher.clone(),
                 witness_node: Some(witness.name.clone()),
                 examined_blocks,
+                cryptographically_verified_blocks: examined_blocks,
                 path: entry.path,
-                reason: "lower finalized block is reachable from the higher finalized block through the node-reported justification DAG".to_string(),
+                reason: "lower finalized block is reachable through a justification DAG decoded only from BLAKE2b-256-verified raw block preimages".to_string(),
             };
         }
 
@@ -178,37 +163,10 @@ pub async fn verify_ancestry(
         higher: higher.clone(),
         witness_node: Some(witness.name.clone()),
         examined_blocks,
+        cryptographically_verified_blocks: examined_blocks,
         path: Vec::new(),
-        reason: "complete justification traversal reached the target height without the lower finalized hash".to_string(),
+        reason: "complete cryptographically verified justification traversal reached the target height without the lower finalized hash".to_string(),
     }
-}
-
-async fn fetch_block(
-    client: &Client,
-    witness: &NodeTarget,
-    hash: &str,
-) -> Result<BlockEvidence, String> {
-    let base = witness.base_url.trim_end_matches('/');
-    let url = format!("{base}/api/block/{hash}");
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|error| sanitize_error(witness, error.to_string()))?;
-    let response = response
-        .error_for_status()
-        .map_err(|error| sanitize_error(witness, error.to_string()))?;
-    let response = response
-        .json::<BlockResponse>()
-        .await
-        .map_err(|error| sanitize_error(witness, error.to_string()))?;
-    response
-        .block_info
-        .ok_or_else(|| "block response did not include blockInfo".to_string())
-}
-
-fn sanitize_error(witness: &NodeTarget, error: String) -> String {
-    error.replace(&witness.base_url, "<node>")
 }
 
 fn unresolved(
@@ -224,6 +182,7 @@ fn unresolved(
         higher: higher.clone(),
         witness_node: Some(witness.name.clone()),
         examined_blocks,
+        cryptographically_verified_blocks: examined_blocks,
         path: Vec::new(),
         reason: reason.to_string(),
     }

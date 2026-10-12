@@ -138,7 +138,7 @@ finalized hash
 error, if the observation failed
 ```
 
-Then it computes network-level height ranges and classifies the finalized observations. If finalized heights differ without a same-height hash conflict, the observer performs a bounded ancestry check over the higher block's node-reported justification DAG using `GET /api/block/{hash}` before refining the verdict.
+Then it computes network-level height ranges and classifies the finalized observations. If finalized heights differ without a same-height hash conflict, the observer performs a bounded ancestry check over the higher block's justification DAG. Every traversed block is fetched from `GET /api/v1/block/{hash}/raw`; its raw encoded preimage is hashed locally with BLAKE2b-256, the detached proposer signature is verified over that 32-byte hash, and only then are `blockNumber`, `shardId`, and `justifications` decoded from the verified protobuf bytes.
 
 The live service uses a **bounded polling loop** and serves the most recent cached snapshot to HTTP clients. A browser refresh therefore does **not** trigger a fresh fan-out of requests to every validator.
 
@@ -305,11 +305,12 @@ lower finalized identity
 higher finalized identity
 witness node label
 examined block count
+cryptographically verified block count
 justification path, when proven
 reason
 ```
 
-The traversal is bounded. If the observer cannot complete the evidence graph safely, the check stays `unresolved_height_skew` rather than guessing.
+The traversal is bounded. A block counts as examined evidence only after its raw preimage hashes to the requested content address and its proposer signature verifies. If the observer cannot complete the evidence graph safely, the check stays `unresolved_height_skew` rather than guessing.
 
 ## D. Verdict
 
@@ -453,10 +454,11 @@ The core path is deliberately small enough to audit.
 src/main.rs        CLI, polling service, HTTP surface
 src/observer.rs    concurrent node observation + ancestry orchestration
 src/ancestry.rs    bounded justification-DAG ancestry verifier
+src/raw_block.rs   raw-preimage hash/signature verification + protobuf evidence decoder
 src/model.rs       observation/report/verdict/evidence model
 src/verdict.rs     snapshot classifier + ancestry refinement
 tests/verdict.rs   deterministic snapshot-verdict tests
-tests/ancestry.rs  deterministic HTTP ancestry-evidence tests
+tests/ancestry.rs  deterministic raw-evidence / tamper / ancestry tests
 ```
 
 Development checks:
@@ -498,10 +500,13 @@ What exists now:
 ✓ exact agreement
 ✓ height-skew classification
 ✓ bounded justification-DAG ancestry verification
+✓ raw block preimage BLAKE2b-256 verification
+✓ detached proposer signature verification (`secp256k1` / `secp256k1:eth`)
+✓ ancestry fields decoded only from cryptographically verified protobuf bytes
 ✓ explicit `proven_lag` classification
 ✓ explicit `conflicting_finalized_history` classification
 ✓ unresolved ancestry remains `height_skew`
-✓ ancestry witness/path/examined-block evidence
+✓ ancestry witness/path/examined/cryptographically-verified block evidence
 ✓ majority conflict classification
 ✓ divergence classification
 ✓ private topology redaction
@@ -511,7 +516,6 @@ What exists now:
 What is deliberately not claimed yet:
 
 ```text
-✗ independent cryptographic re-hash of raw block bytes
 ✗ historical evidence persistence
 ✗ cryptographically signed observer reports
 ✗ stake-weighted application policy
@@ -526,12 +530,12 @@ Those are separate engineering problems and should stay separate instead of bein
 
 The next useful layers are about making evidence richer, not making the verdict louder.
 
-1. **Raw-block cryptographic verification** — reproduce content-addressed block hashes from the node's raw encoded bytes instead of relying only on the structured block response.
-2. **Bounded observation history** — preserve transitions across time instead of exposing only the latest snapshot.
-3. **Stable evidence identities** — make reports addressable and reproducible across clients.
-4. **Deploy-to-finality evidence** — connect a deploy id to processing, inclusion, finalized visibility, and cross-node confirmation.
-5. **Configurable policy** — allow consumers to define what evidence is sufficient for their own application boundary without changing the raw observations.
-6. **Independent observer instances** — separate node diversity from observer-process diversity when the deployment warrants it.
+1. **Bounded observation history** — preserve transitions across time instead of exposing only the latest snapshot.
+2. **Stable evidence identities** — make reports addressable and reproducible across clients.
+3. **Deploy-to-finality evidence** — connect a deploy id to processing, inclusion, finalized visibility, and cross-node confirmation.
+4. **Configurable policy** — allow consumers to define what evidence is sufficient for their own application boundary without changing the raw observations.
+5. **Independent observer instances** — separate node diversity from observer-process diversity when the deployment warrants it.
+6. **Signed observer reports** — bind a report identity to one observer instance when consumers need transport-independent evidence provenance.
 
 The principle is constant:
 
