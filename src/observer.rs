@@ -146,6 +146,7 @@ impl Observer {
                     higher: reference.clone(),
                     witness_node: None,
                     examined_blocks: 0,
+                    cryptographically_verified_blocks: 0,
                     path: Vec::new(),
                     reason: "no node reporting the highest finalized reference is available as an ancestry witness".to_string(),
                 });
@@ -173,6 +174,7 @@ impl Observer {
                         higher: reference.clone(),
                         witness_node: Some(witness.name.clone()),
                         examined_blocks: 0,
+                        cryptographically_verified_blocks: 0,
                         path: Vec::new(),
                         reason: "ancestry verification exceeded the total time budget".to_string(),
                     },

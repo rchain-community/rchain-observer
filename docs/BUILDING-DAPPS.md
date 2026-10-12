@@ -340,7 +340,7 @@ finalized hash
 error
 ```
 
-The classifier first compares finalized identities. When heights differ without a same-height hash conflict, the observer then verifies ancestry by walking the higher finalized block's node-reported justification DAG through `GET /api/block/{hash}`.
+The classifier first compares finalized identities. When heights differ without a same-height hash conflict, the observer verifies ancestry through `GET /api/v1/block/{hash}/raw`. Each raw preimage must reproduce the requested block hash with BLAKE2b-256 and the detached proposer signature must verify before the observer decodes `blockNumber`, `shardId`, or `justifications` from those protobuf bytes.
 
 ### Current verdicts
 
@@ -527,9 +527,9 @@ conflicting_finalized_history
 unresolved height_skew
 ```
 
-The traversal is bounded and fail-closed: incomplete block evidence never becomes a positive ancestry claim.
+The traversal is bounded and fail-closed: incomplete block evidence, a preimage/hash mismatch, an invalid proposer signature, or malformed protobuf evidence never becomes a positive ancestry claim.
 
-The current layer still does **not** independently reconstruct the block hash from raw encoded block bytes, persist a historical evidence ledger, or establish agreement between multiple independent observer processes. Those are separate evidence-strengthening layers rather than prerequisites for ordinary ancestry classification.
+The current layer independently reconstructs every traversed block hash from the raw encoded preimage and verifies the detached proposer signature before reading ancestry fields. It still does **not** persist a historical evidence ledger, cryptographically sign observer reports, or establish agreement between multiple independent observer processes. Those are separate evidence-strengthening layers.
 
 ---
 

@@ -5,6 +5,10 @@ edition = "2021"
 description = "Multi-node observation and divergence detection for RChain networks"
 
 [dependencies]
+blake2 = "0.10"
+hex = "0.4"
+k256 = { version = "0.14", features = ["ecdsa"] }
+prost = "0.13"
 anyhow = "1.0"
 axum = "0.8"
 clap = { version = "4.5", features = ["derive"] }
