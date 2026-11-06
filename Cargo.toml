@@ -1,8 +1,8 @@
 [package]
 name = "rchain-observer"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Multi-node observation and divergence detection for RChain networks"
+description = "Rho Observer: read-only multi-node finality evidence for Rholo networks"
 
 [dependencies]
 blake2 = "0.10"

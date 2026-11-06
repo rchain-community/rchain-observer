@@ -6,7 +6,7 @@ The shortest useful answer is:
 
 > Learn **Rholang** for on-chain behavior, **TypeScript/JavaScript** for the client, and the **RChain deploy/finality model** for safely connecting the two.
 
-`rchain-observer` then supplies the read-only multi-node evidence layer that a serious application can use instead of treating one HTTP endpoint as truth.
+**Rho Observer** (the `rchain-observer` binary) then supplies the read-only multi-node evidence layer that a serious application can use instead of treating one HTTP endpoint as truth.
 
 ---
 
@@ -19,7 +19,7 @@ RChain          = L1 execution + consensus + finalized state
 Rholang         = contract/process language
 RSpace          = state / communication substrate
 Rholox          = wallet + deploy + proof + explorer + asset/application surface
-rchain-observer = multi-node finalized-state evidence
+Rho Observer     = multi-node finalized-state evidence
 Your DApp       = domain logic + product UX on top
 ```
 
@@ -90,7 +90,7 @@ This is not cosmetic terminology. It determines what your UI is allowed to claim
 
 ### Optional: Rust
 
-Rust is **not** required to write a Rholang DApp. It matters if you are contributing to `rchain-observer`, node infrastructure, backend services, or lower-level tooling.
+Rust is **not** required to write a Rholang DApp. It matters if you are contributing to [Rho Observer](https://github.com/rhovision-org/rho-observer), node infrastructure, backend services, or lower-level tooling.
 
 ---
 
@@ -262,7 +262,7 @@ A deploy status may represent success, execution error, or not-yet-processed sta
 GET /api/last-finalized-block
 ```
 
-This is the core surface currently used by `rchain-observer` alongside `/api/status`.
+This is the core surface currently used by Rho Observer alongside `/api/status`.
 
 ---
 
@@ -302,7 +302,7 @@ Rholox is intentionally moving toward evidence-first UX rather than presenting e
 
 ---
 
-## 8. Where `rchain-observer` enters the DApp
+## 8. Where Rho Observer enters the DApp
 
 The observer sits on the read/evidence side:
 
@@ -384,7 +384,7 @@ src/chain/*.ts
 
 src/evidence/*.ts
       │
-      └── rchain-observer client
+      └── Rho Observer client
 
 src/ui/*
       │
@@ -517,7 +517,7 @@ If you do not have a measured value for TVL, TPS, APR, liquidity, price, peer co
 
 ---
 
-## 13. What `rchain-observer` proves — and what it still does not
+## 13. What Rho Observer proves — and what it still does not
 
 For different finalized heights, the observer now checks whether the lower finalized hash is reachable from the higher finalized block through the node-reported justification DAG. That is enough to distinguish:
 
