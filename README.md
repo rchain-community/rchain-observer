@@ -58,7 +58,7 @@ Configured endpoints are operator-selected sources. Four endpoints are shown for
 
 Every verdict is evidence-scoped: `agreement`, `proven_lag`, `height_skew`, `majority`, `conflicting_finalized_history`, `divergence` or `unavailable`.
 
-Initiated and developed by [AixAria (`@aixaria0`)](https://github.com/aixaria0) for the [RChain Community](https://github.com/rhovision-org).
+**Project creator and lead developer:** [AixAria (`@aixaria0`)](https://github.com/aixaria0). Source hosted at [rhovision-org/rho-observer](https://github.com/rhovision-org/rho-observer). Hosting and project authorship are separate; contributors retain rights in their respective contributions.
 
 [Rholox](https://rholox.com) · [Hosted observation API](https://testnet.rhobot.net/observer/v1/observation) · [Hosted health](https://testnet.rhobot.net/observer/health) · [DApp guide](docs/BUILDING-DAPPS.md)
 
@@ -77,6 +77,18 @@ The hosted deployment can run a different revision from this repository. Inspect
 | Production check | 23 October 2026: health/readiness returned 200, version 0.2.0, fresh complete 4/4 coverage and single public CORS/cache headers |
 
 The installed 0.2.0 binary came from the digest-verified CI artifact at `6f94f76`. The subsequent `1abec73` change covered proxy configuration, documentation and CI, without changing Rust source. The merged source tree matches that reviewed head. This is a dated deployment record, not an assertion that every later commit is already running.
+
+## License and attribution
+
+Rho Observer is distributed under the **Apache License, Version 2.0**.
+Read [LICENSE](LICENSE) for the full legal terms and [NOTICE](NOTICE) for
+project attribution. The license permits reuse, redistribution and modification,
+subject to its notice and change-documentation conditions, and includes an
+express patent grant. It does not grant trademark rights, guarantee service
+availability, or establish a network consensus certificate.
+
+Repository location is not an ownership claim. Copyright in contributions
+remains with the respective rightsholders, as documented by repository history.
 
 ## Identity and compatibility
 
