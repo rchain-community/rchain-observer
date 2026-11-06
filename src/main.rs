@@ -20,8 +20,8 @@ use tokio::{
 };
 
 #[derive(Debug, Parser)]
-#[command(name = "rchain-observer")]
-#[command(about = "Cross-check finalized state across RChain nodes")]
+#[command(name = "rho-observer")]
+#[command(about = "Rho Observer: read-only multi-node finalized-state evidence")]
 struct Cli {
     #[arg(long = "node", value_parser = parse_node, required = true)]
     nodes: Vec<NodeTarget>,

@@ -1,6 +1,6 @@
-# rholo-observer
+# Rho Observer
 
-A read-only observation service that compares finalized snapshots across configured RChain HTTP endpoints and checks bounded raw-block justification ancestry when heights differ.
+**Rho Observer** is a read-only observation service that compares finalized snapshots across configured RChain HTTP endpoints and checks bounded raw-block justification ancestry when heights differ.
 
 Initiated and developed by [AixAria (`@aixaria0`)](https://github.com/aixaria0) for the [RChain Community](https://github.com/rhovision-org).
 
@@ -12,14 +12,24 @@ The hosted deployment can run a different revision from this repository. Inspect
 
 | Item | Recorded value |
 | --- | --- |
-| Service version | `0.2.0`, declared in `Cargo.toml` |
+| Verified hosted baseline | `0.2.0` (23 October 2026; not automatically updated) |
+| Source candidate | `0.3.0` (Rho Observer operational metrics; requires separate deployment) |
 | Report schema | `schema_version: 1` |
-| Integration | [PR #4](https://github.com/rhovision-org/rchain-observer/pull/4), merge `a5d0796` |
-| Post-merge verification | [CI run 39885469376](https://github.com/rhovision-org/rchain-observer/actions/runs/39885469376), all four jobs successful |
+| Integration | [PR #4](https://github.com/rhovision-org/rho-observer/pull/4), merge `a5d0796` |
+| Post-merge verification | [CI run 39885469376](https://github.com/rhovision-org/rho-observer/actions/runs/39885469376), all four jobs successful |
 | Hosted consumer | [Rholox 0.8.1](https://rholox.com/), a separate browser application and deployment |
 | Production check | 23 October 2026: health/readiness returned 200, version 0.2.0, fresh complete 4/4 coverage and single public CORS/cache headers |
 
 The installed 0.2.0 binary came from the digest-verified CI artifact at `6f94f76`. The subsequent `1abec73` change covered proxy configuration, documentation and CI, without changing Rust source. The merged source tree matches that reviewed head. This is a dated deployment record, not an assertion that every later commit is already running.
+
+## Identity and compatibility
+
+The GitHub repository is now [rhovision-org/rho-observer](https://github.com/rhovision-org/rho-observer).
+The Rust package, binary artifact, systemd user and deployed executable intentionally retain
+the legacy `rchain-observer` identifier for deployment compatibility. The CLI help
+identifies the product as Rho Observer. Do not rename or restart the installed
+systemd service as part of this repository-only release; migrate deployment paths
+separately with a tested rollback.
 
 ## Trust boundary
 
@@ -79,6 +89,7 @@ For a locally running server:
 curl --fail --show-error --silent --max-time 10 http://127.0.0.1:8088/health
 curl --fail --show-error --silent --max-time 10 http://127.0.0.1:8088/ready
 curl --fail --show-error --silent --max-time 10 http://127.0.0.1:8088/v1/observation
+curl --fail --show-error --silent --max-time 10 http://127.0.0.1:8088/metrics
 ```
 
 The readiness command fails on HTTP 503. To inspect a degraded response body and status together, use `curl --include --max-time 10 http://127.0.0.1:8088/ready`. Behind the supplied reverse proxy, prefix these routes with `/observer`. These checks do not submit deploys or mutate a validator.
@@ -90,6 +101,9 @@ The readiness command fails on HTTP 503. To inspect a degraded response body and
 | `GET /v1/observation` | 200, latest cached JSON report | Evidence, including incomplete/unavailable/conflicting results |
 | `GET /health` | 200 when the HTTP process responds | Liveness; payload separately reports `ok`, `degraded` or `stale` |
 | `GET /ready` | 200 or 503 | Fresh, complete coverage of at least two configured endpoints, with `agreement` or `proven_lag` |
+| `GET /metrics` | 200, Prometheus text exposition | Bounded-cardinality evidence freshness, readiness, coverage and verdict |
+
+The optional `/metrics` route exports static `rho_observer_*` gauges and a seven-class one-hot `rho_observer_verdict{class=...}` gauge. It uses the same cached report and readiness predicate as `/ready`; no validator request is issued on scrape. No target URLs, names, hashes or dynamic network identifiers are exported as labels. A public metrics path can be restricted at the edge by the operator.
 
 Readiness is a defined monitoring policy, not a consensus certificate. It does not require finalized heights to be identical when ancestry has connected them. HTTP snapshot requests never trigger validator fan-out. GET routes also support HEAD; other methods are rejected. Unknown routes return 404. Responses include `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, a restrictive content-security policy and credential-free public read CORS.
 
@@ -287,7 +301,7 @@ CI runs on pushes and pull requests. Passing local mocks, a release build or a d
 | `src/verdict.rs` | Comparable identities, deterministic classification and ancestry refinement |
 | `src/raw_block.rs` | Raw preimage parsing, content-address and proposer-signature verification |
 | `src/ancestry.rs` | Bounded justification traversal and witness paths |
-| `src/service.rs` | Cached API, HTTP headers, liveness and readiness |
+| `src/service.rs` | Cached API, HTTP headers, liveness, readiness and static-label metrics |
 | `src/main.rs` | CLI, polling loop, listener and graceful shutdown |
 | `tests/` | Classifier, ancestry and reliability regression fixtures |
 | `scripts/test-nginx-proxy.py` | Isolated real-Nginx integration contract |

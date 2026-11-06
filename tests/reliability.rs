@@ -340,3 +340,82 @@ async fn health_readiness_freshness_and_http_boundary_are_distinct() {
     );
     task.abort();
 }
+
+#[tokio::test]
+async fn metrics_share_readiness_and_never_expose_upstream_identifiers() {
+    let mut report = sample(
+        json!({"networkId":"testnet","shardId":"/root","latestBlockNumber":11}),
+        json!({"blockInfo":{"blockNumber":10,"blockHash":"a".repeat(64),"shardId":"/root"}}),
+    )
+    .await;
+    report.observations.push(row("b", 10, 'a'));
+    report.verdict = classify(&report.observations);
+    report.heights.reachable_nodes = 2;
+
+    let state = ApiState {
+        snapshot: Arc::new(RwLock::new(CachedReport {
+            report: report.clone(),
+            sampled: Instant::now(),
+        })),
+        stale_after: Duration::from_secs(30),
+    };
+    let (url, task) = spawn(service::router(state.clone())).await;
+    let client = reqwest::Client::new();
+
+    let response = client.get(format!("{url}/metrics")).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert!(response.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .starts_with("text/plain; version=0.0.4"));
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let text = response.text().await.unwrap();
+    assert!(text.contains("\nrho_observer_ready 1\n"));
+    assert!(text.contains("\nrho_observer_stale 0\n"));
+    assert!(text.contains("\nrho_observer_observed_nodes 2\n"));
+    assert!(text.contains("\nrho_observer_comparable_nodes 2\n"));
+    assert!(text.contains("rho_observer_verdict{class=\"agreement\"} 1\n"));
+    assert!(!text.contains("example"));
+    assert!(!text.contains("127.0.0.1"));
+    assert!(!text.contains(&url));
+
+    let mut conflict = report.clone();
+    conflict.observations[1].finalized_hash = Some("b".repeat(64));
+    conflict.verdict = classify(&conflict.observations);
+    assert_eq!(conflict.verdict.class, VerdictClass::Divergence);
+    state.snapshot.write().await.report = conflict;
+    let response = client.get(format!("{url}/metrics")).send().await.unwrap();
+    let text = response.text().await.unwrap();
+    assert!(text.contains("\nrho_observer_ready 0\n"));
+    assert!(text.contains("rho_observer_verdict{class=\"divergence\"} 1\n"));
+    assert!(text.contains("rho_observer_verdict{class=\"agreement\"} 0\n"));
+
+    {
+        let mut snapshot = state.snapshot.write().await;
+        snapshot.report = report;
+        snapshot.sampled = Instant::now() - Duration::from_secs(31);
+    }
+    let response = client.get(format!("{url}/metrics")).send().await.unwrap();
+    let text = response.text().await.unwrap();
+    assert!(text.contains("\nrho_observer_ready 0\n"));
+    assert!(text.contains("\nrho_observer_stale 1\n"));
+    assert_eq!(
+        client
+            .head(format!("{url}/metrics"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        client
+            .post(format!("{url}/metrics"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        405
+    );
+    task.abort();
+}
