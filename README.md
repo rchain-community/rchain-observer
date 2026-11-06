@@ -68,15 +68,16 @@ The hosted deployment can run a different revision from this repository. Inspect
 
 | Item | Recorded value |
 | --- | --- |
-| Verified hosted baseline | `0.2.0` (23 October 2026; not automatically updated) |
+| Previous hosted baseline | `0.2.0` (23 October 2026; replaced on 7 November 2026) |
 | Current main source | `0.3.0`; CI on [merge `3933e432`](https://github.com/rhovision-org/rho-observer/actions/runs/42302946085) passed, independent of deployment |
+| Verified live upgrade | `0.3.0` deployed 7 November 2026; public `/health` and `/ready` responded 200, with fresh 4/4 reachable and comparable nodes and `agreement` at that observation time |
 | Report schema | `schema_version: 1` |
 | Integration | [PR #4](https://github.com/rhovision-org/rho-observer/pull/4), merge `a5d0796` |
 | Post-merge verification | [CI run 39885469376](https://github.com/rhovision-org/rho-observer/actions/runs/39885469376), all four jobs successful |
 | Browser consumer | [Rholox](https://rholox.com/); source and live deployment may differ |
 | Production check | 23 October 2026: health/readiness returned 200, version 0.2.0, fresh complete 4/4 coverage and single public CORS/cache headers |
 
-The installed 0.2.0 binary came from the digest-verified CI artifact at `6f94f76`. The subsequent `1abec73` change covered proxy configuration, documentation and CI, without changing Rust source. The merged source tree matches that reviewed head. This is a dated deployment record, not an assertion that every later commit is already running.
+The previous 0.2.0 binary came from the digest-verified CI artifact at `6f94f76`. The subsequent `1abec73` change covered proxy configuration, documentation and CI, without changing Rust source. That historical deployment matched its reviewed head. On 7 November 2026, the observer was upgraded with the CI-verified static Linux 0.3.0 artifact; the server unit was corrected to use a reachable endpoint for the two remote nodes. The old binary and unit were backed up before restart. The 96 MiB service memory limit and all validator processes were left unchanged. The 4/4 readiness result is a point-in-time observation, not a guarantee of continuing node availability or independent Casper finality.
 
 ## License and attribution
 
