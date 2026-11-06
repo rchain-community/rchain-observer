@@ -3,6 +3,8 @@ name = "rchain-observer"
 version = "0.3.0"
 edition = "2021"
 description = "Rho Observer: read-only multi-node finality evidence for Rholo networks"
+license = "Apache-2.0"
+repository = "https://github.com/rhovision-org/rho-observer"
 
 [dependencies]
 blake2 = "0.10"
