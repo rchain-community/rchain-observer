@@ -17,7 +17,7 @@ import time
 class Upstream(BaseHTTPRequestHandler):
     def respond(self):
         self.server.methods.append(self.command)
-        known = self.path in ("/health", "/ready", "/v1/observation")
+        known = self.path in ("/health", "/ready", "/v1/observation", "/metrics")
         status = 200 if known else 404
         if self.path == "/ready" and not self.server.ready:
             status = 503
@@ -102,6 +102,8 @@ def main():
                             time.sleep(0.05)
                     assert request("/ready")[0] == 200
                     assert request("/v1/observation")[0] == 200
+                    assert request("/metrics")[0] == 200
+                    assert request("/metrics", "HEAD") == (200, b"")
                     assert request("/ready", "HEAD") == (200, b"")
                     upstream.ready = False
                     status, body = request("/ready")
@@ -109,6 +111,7 @@ def main():
                     assert request("/ready", "HEAD") == (503, b"")
                     assert request("/missing")[0] == 404
                     assert request("/v1/observation", "POST")[0] == 403
+                    assert request("/metrics", "POST")[0] == 403
                     assert request("/v1/observation", "OPTIONS")[0] == 403
                     assert set(upstream.methods) == {"GET", "HEAD"}, upstream.methods
                 finally:
