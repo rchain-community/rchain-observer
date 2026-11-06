@@ -1,6 +1,62 @@
+<div align="center">
+
 # Rho Observer
 
-**Rho Observer** is a read-only observation service that compares finalized snapshots across configured RChain HTTP endpoints and checks bounded raw-block justification ancestry when heights differ.
+**Read-only network evidence. Explicit uncertainty.**
+
+A bounded Rust observer for comparing finalized-state reports across Rholo / RChain endpoints.
+It records what each configured source actually returned instead of treating one HTTP gateway as network truth.
+
+[![CI](https://github.com/rhovision-org/rho-observer/actions/workflows/ci.yml/badge.svg)](https://github.com/rhovision-org/rho-observer/actions/workflows/ci.yml)
+[![Rust](https://img.shields.io/badge/runtime-Rust-1a2638?logo=rust)](https://www.rust-lang.org/)
+[![Read only](https://img.shields.io/badge/mode-read--only-15817d)](#trust-boundary)
+
+[Live Rholox workspace](https://rholox.com/#rho-observer) ·
+[Public observation](https://testnet.rhobot.net/observer/v1/observation) ·
+[Service health](https://testnet.rhobot.net/observer/health) ·
+[Assurance matrix](docs/ASSURANCE.md)
+
+</div>
+
+> **Observation is not consensus certification.** Agreement among reachable endpoints, cryptographically verified ancestry, full node coverage and stake-weighted finality are different claims. Rho Observer makes their boundaries visible.
+
+## Navigate
+
+[Architecture](#architecture-at-a-glance) · [Evidence semantics](#evidence-at-a-glance) ·
+[Trust boundary](#trust-boundary) · [Quick start](#build-and-run) ·
+[HTTP API](#http-contract) · [Verification](#reproducible-verification) ·
+[Deployment & rollback](#deployment)
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    A["Configured endpoint A"] --> O
+    B["Configured endpoint B"] --> O
+    C["Configured endpoint C"] --> O
+    D["Configured endpoint D"] --> O
+    O["Rho Observer<br/>bounded read-only polling"] --> E["Comparable identities<br/>coverage and verdict"]
+    E --> R["Cached JSON /v1/observation"]
+    E --> H["Liveness /health<br/>Readiness /ready"]
+    E --> M["Bounded-label /metrics"]
+    R --> UI["Rholox browser console"]
+    O -. "Only when heights differ" .-> P["Raw preimage, hash and signature checks"]
+    P -. "Evidence refinement" .-> E
+```
+
+Configured endpoints are operator-selected sources. Four endpoints are shown for illustration, not a fixed protocol quorum or proof of independent operators. Browser reads use the cache; they do not trigger fresh validator fan-out.
+
+## Evidence at a glance
+
+| Question | What is checked | What is **not** inferred |
+| --- | --- | --- |
+| Do snapshots match? | Complete, comparable (network, shard, height, hash) identities | That a source is a bonded validator or that a finality certificate exists |
+| Can different heights connect? | Bounded raw justification ancestry, BLAKE2b-256 content address and proposer signature | Independent Casper validation or stake-weighted quorum |
+| Is the observer responding? | HTTP liveness via `/health` | Freshness or complete coverage |
+| Is the report ready? | Monotonic freshness, full comparable/reachable coverage, at least two sources, agreement or proven lag | That chain height is progressing |
+| Can it be monitored? | Cached, fixed-cardinality `rho_observer_*` metrics | Network truth from successful scrapes |
+
+Every verdict is evidence-scoped: `agreement`, `proven_lag`, `height_skew`, `majority`, `conflicting_finalized_history`, `divergence` or `unavailable`.
 
 Initiated and developed by [AixAria (`@aixaria0`)](https://github.com/aixaria0) for the [RChain Community](https://github.com/rhovision-org).
 
@@ -13,11 +69,11 @@ The hosted deployment can run a different revision from this repository. Inspect
 | Item | Recorded value |
 | --- | --- |
 | Verified hosted baseline | `0.2.0` (23 October 2026; not automatically updated) |
-| Source candidate | `0.3.0` (Rho Observer operational metrics; requires separate deployment) |
+| Current main source | `0.3.0`; CI on [merge `3933e432`](https://github.com/rhovision-org/rho-observer/actions/runs/42302946085) passed, independent of deployment |
 | Report schema | `schema_version: 1` |
 | Integration | [PR #4](https://github.com/rhovision-org/rho-observer/pull/4), merge `a5d0796` |
 | Post-merge verification | [CI run 39885469376](https://github.com/rhovision-org/rho-observer/actions/runs/39885469376), all four jobs successful |
-| Hosted consumer | [Rholox 0.8.1](https://rholox.com/), a separate browser application and deployment |
+| Browser consumer | [Rholox](https://rholox.com/); source and live deployment may differ |
 | Production check | 23 October 2026: health/readiness returned 200, version 0.2.0, fresh complete 4/4 coverage and single public CORS/cache headers |
 
 The installed 0.2.0 binary came from the digest-verified CI artifact at `6f94f76`. The subsequent `1abec73` change covered proxy configuration, documentation and CI, without changing Rust source. The merged source tree matches that reviewed head. This is a dated deployment record, not an assertion that every later commit is already running.
@@ -282,7 +338,7 @@ Install the musl target/toolchain and `cargo-audit` before their checks. CI runs
 
 ## Verification matrix and source map
 
-At the recorded release, the locked Rust suite contains 24 deterministic tests. The proxy contract runs separately against real Nginx and an isolated mock upstream.
+The original v0.2.0 release recorded 24 deterministic Rust tests; subsequent changes add operational-metrics regression coverage. The proxy contract runs separately against real Nginx and an isolated mock upstream.
 
 | CI job | Checks / output |
 | --- | --- |
